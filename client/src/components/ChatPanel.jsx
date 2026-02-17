@@ -10,7 +10,9 @@ export default function ChatPanel({
   onLinkClick,
   onMenuToggle,
   previewOpen,
-  mapsApiKey
+  mapsApiKey,
+  tools,
+  onToggleTool
 }) {
   const handleLinkClick = (url) => {
     // Handle suggestion clicks
@@ -44,7 +46,12 @@ export default function ChatPanel({
         mapsApiKey={mapsApiKey}
       />
 
-      <MessageInput onSend={onSend} disabled={loading} />
+      <MessageInput
+        onSend={onSend}
+        disabled={loading}
+        tools={tools}
+        onToggleTool={onToggleTool}
+      />
     </div>
   );
 }

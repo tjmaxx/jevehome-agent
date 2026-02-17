@@ -1,4 +1,6 @@
 import { geocode, searchPlaces, getDirections, getPlaceDetails } from './maps.js';
+import { sendEmail } from './email.js';
+import { searchDocuments } from './rag.js';
 
 export const tools = [
   {
@@ -70,6 +72,30 @@ export const tools = [
       type: "object",
       properties: {},
       required: []
+    }
+  },
+  {
+    name: "send_email",
+    description: "Send an email to a recipient",
+    parameters: {
+      type: "object",
+      properties: {
+        to: { type: "string", description: "Recipient email address" },
+        subject: { type: "string", description: "Email subject line" },
+        body: { type: "string", description: "Email body text" }
+      },
+      required: ["to", "subject", "body"]
+    }
+  },
+  {
+    name: "search_documents",
+    description: "Search through uploaded knowledge base documents to find relevant information. Use this when the user asks questions that might be answered by their uploaded documents, or when they reference their files or knowledge base.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Search query to find relevant document content" }
+      },
+      required: ["query"]
     }
   }
 ];
@@ -245,6 +271,18 @@ export async function executeFunctionCall(name, args, userLocation = null) {
               title: `Your location: ${userLocation.description}`
             }]
           }
+        };
+      }
+
+      case 'send_email': {
+        return await sendEmail(args.to, args.subject, args.body);
+      }
+
+      case 'search_documents': {
+        const result = await searchDocuments(args.query);
+        return {
+          success: true,
+          ...result
         };
       }
 

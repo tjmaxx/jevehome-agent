@@ -14,7 +14,7 @@ const router = express.Router();
 
 router.post('/', async (req, res) => {
   try {
-    const { conversationId, message } = req.body;
+    const { conversationId, message, enabledTools } = req.body;
 
     if (!message) {
       return res.status(400).json({ error: 'Message is required' });
@@ -42,7 +42,7 @@ router.post('/', async (req, res) => {
 
     // Get response from Gemini
     const messages = [...history.map(m => ({ role: m.role, content: m.content })), { role: 'user', content: message }];
-    const { reply, mapData, searchResults } = await chat(messages, history, userLocation);
+    const { reply, mapData, searchResults } = await chat(messages, history, userLocation, enabledTools);
 
     // Save assistant response
     addMessage(convId, 'assistant', reply, mapData, searchResults);

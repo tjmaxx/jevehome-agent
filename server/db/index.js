@@ -95,4 +95,54 @@ export function getMessages(conversationId) {
   }));
 }
 
+// Document operations
+export function createDocument(id, filename, originalName, fileType, fileSize) {
+  const stmt = db.prepare(
+    'INSERT INTO documents (id, filename, original_name, file_type, file_size) VALUES (?, ?, ?, ?, ?)'
+  );
+  stmt.run(id, filename, originalName, fileType, fileSize);
+  return { id, filename, original_name: originalName, file_type: fileType, file_size: fileSize, status: 'processing', chunk_count: 0 };
+}
+
+export function getDocuments() {
+  return db.prepare('SELECT * FROM documents ORDER BY created_at DESC').all();
+}
+
+export function getDocument(id) {
+  return db.prepare('SELECT * FROM documents WHERE id = ?').get(id);
+}
+
+export function updateDocumentStatus(id, status, chunkCount = null, errorMessage = null) {
+  const stmt = db.prepare(
+    'UPDATE documents SET status = ?, chunk_count = COALESCE(?, chunk_count), error_message = ? WHERE id = ?'
+  );
+  stmt.run(status, chunkCount, errorMessage, id);
+}
+
+export function deleteDocument(id) {
+  db.prepare('DELETE FROM documents WHERE id = ?').run(id);
+}
+
+export function insertChunksBatch(chunks) {
+  const stmt = db.prepare(
+    'INSERT INTO document_chunks (id, document_id, chunk_index, content, embedding) VALUES (?, ?, ?, ?, ?)'
+  );
+  const insertMany = db.transaction((items) => {
+    for (const c of items) {
+      stmt.run(c.id, c.documentId, c.chunkIndex, c.content, JSON.stringify(c.embedding));
+    }
+  });
+  insertMany(chunks);
+}
+
+export function getAllChunksWithEmbeddings() {
+  return db.prepare(`
+    SELECT dc.id, dc.document_id, dc.chunk_index, dc.content, dc.embedding,
+           d.original_name as document_name
+    FROM document_chunks dc
+    JOIN documents d ON dc.document_id = d.id
+    WHERE d.status = 'ready'
+  `).all();
+}
+
 export default db;

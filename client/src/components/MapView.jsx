@@ -2,8 +2,6 @@ import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import {
   GoogleMap,
   useJsApiLoader,
-  Marker,
-  InfoWindow,
   TrafficLayer,
   StreetViewPanorama
 } from '@react-google-maps/api';
@@ -14,6 +12,8 @@ const containerStyle = {
 };
 
 const defaultCenter = { lat: 38.9072, lng: -77.0369 }; // Washington DC
+
+const LIBRARIES = ['places', 'marker'];
 
 // Decode Google polyline
 function decodePolyline(encoded) {
@@ -54,12 +54,32 @@ function decodePolyline(encoded) {
   return points;
 }
 
-export default function MapView({ mapData, apiKey, onPlaceClick }) {
-  const [activeMarker, setActiveMarker] = useState(null);
+// Create a styled pin element for AdvancedMarkerElement
+function createMarkerContent(label) {
+  const container = document.createElement('div');
+  container.style.cssText = `
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: #4285F4;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    color: #fff;
+    font-size: 13px;
+    font-weight: bold;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    cursor: pointer;
+  `;
+  container.textContent = label || '';
+  return container;
+}
 
+export default function MapView({ mapData, apiKey, onPlaceClick }) {
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: apiKey || '',
-    libraries: ['places']
+    libraries: LIBRARIES
   });
 
   const center = useMemo(() => {
@@ -74,14 +94,6 @@ export default function MapView({ mapData, apiKey, onPlaceClick }) {
 
   const zoom = mapData?.zoom || 14;
 
-  const handleMarkerClick = useCallback((marker, idx) => {
-    setActiveMarker(idx);
-  }, []);
-
-  const handleInfoWindowClose = useCallback(() => {
-    setActiveMarker(null);
-  }, []);
-
   const polylinePath = useMemo(() => {
     if (mapData?.polyline) {
       return decodePolyline(mapData.polyline);
@@ -89,17 +101,96 @@ export default function MapView({ mapData, apiKey, onPlaceClick }) {
     return null;
   }, [mapData?.polyline]);
 
-  const mapRef = useRef(null);
+  const [mapInstance, setMapInstance] = useState(null);
   const polylineRef = useRef(null);
+  const markersRef = useRef([]);
+  const infoWindowRef = useRef(null);
 
   const onMapLoad = useCallback((map) => {
-    mapRef.current = map;
+    setMapInstance(map);
   }, []);
+
+  // Clean up markers and info window
+  const clearMarkers = useCallback(() => {
+    markersRef.current.forEach(m => { m.map = null; });
+    markersRef.current = [];
+    if (infoWindowRef.current) {
+      infoWindowRef.current.close();
+      infoWindowRef.current = null;
+    }
+  }, []);
+
+  // Create AdvancedMarkerElement instances
+  useEffect(() => {
+    if (!mapInstance || !window.google?.maps?.marker?.AdvancedMarkerElement) return;
+    if (!mapData?.markers?.length) {
+      clearMarkers();
+      return;
+    }
+
+    clearMarkers();
+
+    const infoWindow = new window.google.maps.InfoWindow();
+    infoWindowRef.current = infoWindow;
+
+    mapData.markers.forEach((markerData, idx) => {
+      const marker = new window.google.maps.marker.AdvancedMarkerElement({
+        map: mapInstance,
+        position: markerData.position,
+        title: markerData.title || '',
+        content: markerData.label ? createMarkerContent(markerData.label) : undefined
+      });
+
+      marker.addListener('click', () => {
+        if (markerData.info) {
+          const ratingHtml = markerData.info.rating
+            ? `<p style="margin:0 0 3px;font-size:12px">Rating: ${markerData.info.rating} (${markerData.info.userRatingsTotal} reviews)</p>`
+            : '';
+          const addressHtml = markerData.info.address
+            ? `<p style="margin:0;font-size:12px;color:#666">${markerData.info.address}</p>`
+            : '';
+          const buttonHtml = markerData.info.placeId
+            ? `<button id="info-details-btn-${idx}" style="margin-top:8px;padding:4px 8px;background:#4285F4;color:white;border:none;border-radius:4px;cursor:pointer;font-size:12px">View Details</button>`
+            : '';
+
+          infoWindow.setContent(`
+            <div style="color:#333;max-width:200px">
+              <h4 style="margin:0 0 5px;font-size:14px">${markerData.info.name}</h4>
+              ${ratingHtml}
+              ${addressHtml}
+              ${buttonHtml}
+            </div>
+          `);
+          infoWindow.open({ map: mapInstance, anchor: marker });
+
+          // Attach click handler for View Details button after info window opens
+          if (markerData.info.placeId) {
+            window.google.maps.event.addListenerOnce(infoWindow, 'domready', () => {
+              const btn = document.getElementById(`info-details-btn-${idx}`);
+              if (btn) {
+                btn.addEventListener('click', () => {
+                  onPlaceClick?.(markerData.info);
+                });
+              }
+            });
+          }
+        } else {
+          infoWindow.setContent(`<div style="color:#333;font-size:14px">${markerData.title || 'Location'}</div>`);
+          infoWindow.open({ map: mapInstance, anchor: marker });
+        }
+      });
+
+      markersRef.current.push(marker);
+    });
+
+    return () => {
+      clearMarkers();
+    };
+  }, [mapInstance, mapData?.markers, clearMarkers, onPlaceClick]);
 
   // Draw polyline directly via Google Maps API and fit bounds
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !polylinePath || !window.google) return;
+    if (!mapInstance || !polylinePath || !window.google) return;
 
     // Remove previous polyline
     if (polylineRef.current) {
@@ -113,13 +204,13 @@ export default function MapView({ mapData, apiKey, onPlaceClick }) {
       strokeColor: '#4285F4',
       strokeOpacity: 1,
       strokeWeight: 5,
-      map
+      map: mapInstance
     });
 
     // Fit map bounds to the route
     const bounds = new window.google.maps.LatLngBounds();
     path.forEach(p => bounds.extend(p));
-    map.fitBounds(bounds, 50);
+    mapInstance.fitBounds(bounds, 50);
 
     return () => {
       if (polylineRef.current) {
@@ -127,7 +218,7 @@ export default function MapView({ mapData, apiKey, onPlaceClick }) {
         polylineRef.current = null;
       }
     };
-  }, [polylinePath]);
+  }, [mapInstance, polylinePath]);
 
   if (loadError) {
     return (
@@ -168,6 +259,8 @@ export default function MapView({ mapData, apiKey, onPlaceClick }) {
     );
   }
 
+  const mapId = import.meta.env.VITE_GOOGLE_MAPS_MAP_ID || 'DEMO_MAP_ID';
+
   return (
     <GoogleMap
       mapContainerStyle={containerStyle}
@@ -175,6 +268,7 @@ export default function MapView({ mapData, apiKey, onPlaceClick }) {
       zoom={zoom}
       onLoad={onMapLoad}
       options={{
+        mapId,
         styles: [
           { elementType: 'geometry', stylers: [{ color: '#242f3e' }] },
           { elementType: 'labels.text.stroke', stylers: [{ color: '#242f3e' }] },
@@ -264,52 +358,6 @@ export default function MapView({ mapData, apiKey, onPlaceClick }) {
     >
       {/* Traffic Layer */}
       {mapData?.trafficEnabled && <TrafficLayer />}
-
-      {/* Markers */}
-      {mapData?.markers?.map((marker, idx) => (
-        <Marker
-          key={idx}
-          position={marker.position}
-          label={marker.label}
-          title={marker.title}
-          onClick={() => handleMarkerClick(marker, idx)}
-        >
-          {activeMarker === idx && marker.info && (
-            <InfoWindow onCloseClick={handleInfoWindowClose}>
-              <div style={{ color: '#333', maxWidth: '200px' }}>
-                <h4 style={{ margin: '0 0 5px', fontSize: '14px' }}>{marker.info.name}</h4>
-                {marker.info.rating && (
-                  <p style={{ margin: '0 0 3px', fontSize: '12px' }}>
-                    Rating: {marker.info.rating} ({marker.info.userRatingsTotal} reviews)
-                  </p>
-                )}
-                {marker.info.address && (
-                  <p style={{ margin: '0', fontSize: '12px', color: '#666' }}>
-                    {marker.info.address}
-                  </p>
-                )}
-                {marker.info.placeId && (
-                  <button
-                    onClick={() => onPlaceClick?.(marker.info)}
-                    style={{
-                      marginTop: '8px',
-                      padding: '4px 8px',
-                      background: '#4285F4',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      fontSize: '12px'
-                    }}
-                  >
-                    View Details
-                  </button>
-                )}
-              </div>
-            </InfoWindow>
-          )}
-        </Marker>
-      ))}
     </GoogleMap>
   );
 }

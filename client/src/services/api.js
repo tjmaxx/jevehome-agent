@@ -1,10 +1,22 @@
 const API_BASE = '/api';
 
-export async function sendMessage(conversationId, message) {
+export async function getTools() {
+  const response = await fetch(`${API_BASE}/tools`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch tools');
+  }
+  return response.json();
+}
+
+export async function sendMessage(conversationId, message, enabledTools = null) {
+  const body = { conversationId, message };
+  if (enabledTools) {
+    body.enabledTools = enabledTools;
+  }
   const response = await fetch(`${API_BASE}/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ conversationId, message })
+    body: JSON.stringify(body)
   });
 
   if (!response.ok) {
@@ -77,5 +89,39 @@ export async function getPlaceDetails(placeId) {
     throw new Error('Failed to fetch place details');
   }
 
+  return response.json();
+}
+
+// --- Knowledge Base / RAG ---
+
+export async function getKBDocuments() {
+  const response = await fetch(`${API_BASE}/rag/documents`);
+  if (!response.ok) throw new Error('Failed to fetch documents');
+  return response.json();
+}
+
+export async function uploadKBDocument(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await fetch(`${API_BASE}/rag/documents`, {
+    method: 'POST',
+    body: formData
+  });
+  if (!response.ok) {
+    let errorMessage = 'Failed to upload document';
+    try {
+      const error = await response.json();
+      errorMessage = error.error || errorMessage;
+    } catch {}
+    throw new Error(errorMessage);
+  }
+  return response.json();
+}
+
+export async function deleteKBDocument(id) {
+  const response = await fetch(`${API_BASE}/rag/documents/${id}`, {
+    method: 'DELETE'
+  });
+  if (!response.ok) throw new Error('Failed to delete document');
   return response.json();
 }

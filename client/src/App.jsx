@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import Sidebar from './components/Sidebar';
 import ChatPanel from './components/ChatPanel';
 import LinkPreview from './components/LinkPreview';
+import KnowledgeBase from './components/KnowledgeBase';
 import { useChat } from './hooks/useChat';
 
 // Get API key from environment or use empty string (user should configure via .env)
@@ -10,6 +11,7 @@ const MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
 export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [previewUrl, setPreviewUrl] = useState(null);
+  const [showKnowledgeBase, setShowKnowledgeBase] = useState(false);
 
   const {
     conversationId,
@@ -20,7 +22,9 @@ export default function App() {
     send,
     loadConversation,
     newConversation,
-    deleteConversation
+    deleteConversation,
+    availableTools,
+    toggleTool
   } = useChat();
 
   const handleLinkClick = (url) => {
@@ -46,6 +50,7 @@ export default function App() {
         onNew={newConversation}
         onDelete={deleteConversation}
         collapsed={sidebarCollapsed}
+        onOpenKnowledgeBase={() => setShowKnowledgeBase(true)}
       />
 
       <main className="main-content">
@@ -58,10 +63,16 @@ export default function App() {
           onMenuToggle={toggleSidebar}
           previewOpen={!!previewUrl}
           mapsApiKey={MAPS_API_KEY}
+          tools={availableTools}
+          onToggleTool={toggleTool}
         />
       </main>
 
       <LinkPreview url={previewUrl} onClose={handleClosePreview} />
+
+      {showKnowledgeBase && (
+        <KnowledgeBase onClose={() => setShowKnowledgeBase(false)} />
+      )}
     </div>
   );
 }

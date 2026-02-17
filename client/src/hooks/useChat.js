@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { sendMessage, getConversations, getConversation, deleteConversation as apiDeleteConversation } from '../services/api';
+import { sendMessage, getConversations, getConversation, deleteConversation as apiDeleteConversation, getTools } from '../services/api';
 
 export function useChat() {
   const [conversationId, setConversationId] = useState(null);
@@ -8,9 +8,13 @@ export function useChat() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Load conversations on mount
+  // Tools state: { name, description, source, configured, enabled }
+  const [availableTools, setAvailableTools] = useState([]);
+
+  // Load conversations and tools on mount
   useEffect(() => {
     loadConversations();
+    loadTools();
   }, []);
 
   const loadConversations = useCallback(async () => {
@@ -20,6 +24,26 @@ export function useChat() {
     } catch (err) {
       console.error('Error loading conversations:', err);
     }
+  }, []);
+
+  const loadTools = useCallback(async () => {
+    try {
+      const { tools } = await getTools();
+      setAvailableTools(tools.map(t => ({
+        ...t,
+        enabled: t.configured // default: enabled if configured
+      })));
+    } catch (err) {
+      console.error('Error loading tools:', err);
+    }
+  }, []);
+
+  const toggleTool = useCallback((toolName) => {
+    setAvailableTools(prev => prev.map(t =>
+      t.name === toolName && t.configured
+        ? { ...t, enabled: !t.enabled }
+        : t
+    ));
   }, []);
 
   const loadConversation = useCallback(async (id) => {
@@ -53,8 +77,9 @@ export function useChat() {
       const userMessage = { role: 'user', content: message, id: Date.now() };
       setMessages(prev => [...prev, userMessage]);
 
-      // Send to API
-      const response = await sendMessage(conversationId, message);
+      // Send to API with enabled tools
+      const enabledToolNames = availableTools.filter(t => t.enabled).map(t => t.name);
+      const response = await sendMessage(conversationId, message, enabledToolNames);
 
       // Update conversation ID if new
       if (response.isNewConversation || !conversationId) {
@@ -85,7 +110,7 @@ export function useChat() {
     } finally {
       setLoading(false);
     }
-  }, [conversationId, loadConversations]);
+  }, [conversationId, loadConversations, availableTools]);
 
   const newConversation = useCallback(() => {
     setConversationId(null);
@@ -120,6 +145,8 @@ export function useChat() {
     loadConversation,
     newConversation,
     deleteConversation,
-    loadConversations
+    loadConversations,
+    availableTools,
+    toggleTool
   };
 }

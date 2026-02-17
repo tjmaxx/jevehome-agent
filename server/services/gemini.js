@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { tools, executeFunctionCall } from './functionCalling.js';
+import { getMcpTools, isMcpTool, callMcpTool } from './mcpClient.js';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
@@ -40,6 +41,11 @@ Available capabilities:
 - Show street view panoramas
 - Search the web for current information, news, facts, or general knowledge questions
 - Get the user's approximate location based on their IP address
+- Search through uploaded knowledge base documents for relevant information
+
+When the user asks a question that might be answered by their uploaded documents or knowledge base,
+use the search_documents tool to find relevant information before answering.
+Include the source document name when citing information from the knowledge base.
 
 When showing places, include helpful details like ratings, price levels, and addresses.
 When giving directions, mention estimated time and distance.
@@ -115,17 +121,23 @@ function extractGroundingResults(resp) {
   return null;
 }
 
-export async function chat(messages, conversationHistory = [], userLocation = null) {
+export async function chat(messages, conversationHistory = [], userLocation = null, enabledTools = null) {
   const modelName = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
   const systemPrompt = buildSystemPrompt(userLocation);
   const history = buildHistory(conversationHistory);
   const userMessage = messages[messages.length - 1].content;
 
+  // Merge built-in + MCP tools, then filter by enabledTools if provided
+  let allTools = [...tools, ...getMcpTools()];
+  if (Array.isArray(enabledTools)) {
+    allTools = allTools.filter(t => enabledTools.includes(t.name));
+  }
+
   // Pass 1: Function-calling model (maps tools)
   const fcModel = genAI.getGenerativeModel({
     model: modelName,
     systemInstruction: systemPrompt,
-    tools: [{ functionDeclarations: tools }]
+    tools: allTools.length > 0 ? [{ functionDeclarations: allTools }] : undefined
   });
 
   const chatSession = fcModel.startChat({ history });
@@ -143,7 +155,9 @@ export async function chat(messages, conversationHistory = [], userLocation = nu
     const functionResponses = [];
 
     for (const call of functionCalls) {
-      const functionResult = await executeFunctionCall(call.name, call.args, userLocation);
+      const functionResult = isMcpTool(call.name)
+        ? await callMcpTool(call.name, call.args)
+        : await executeFunctionCall(call.name, call.args, userLocation);
 
       if (functionResult.mapData) {
         allMapData.push({

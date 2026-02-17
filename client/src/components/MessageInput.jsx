@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
+import ToolMenu from './ToolMenu';
 
-export default function MessageInput({ onSend, disabled }) {
+export default function MessageInput({ onSend, disabled, tools, onToggleTool }) {
   const [message, setMessage] = useState('');
   const textareaRef = useRef(null);
 
@@ -28,6 +29,7 @@ export default function MessageInput({ onSend, disabled }) {
 
   return (
     <div className="message-input-container">
+      <ToolMenu tools={tools} onToggle={onToggleTool} />
       <form className="message-input-wrapper" onSubmit={handleSubmit}>
         <textarea
           ref={textareaRef}
