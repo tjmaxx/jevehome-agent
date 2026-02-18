@@ -12,7 +12,9 @@ export default function ChatPanel({
   previewOpen,
   mapsApiKey,
   tools,
-  onToggleTool
+  onToggleTool,
+  onOpenArtifact,
+  artifactOpen
 }) {
   const handleLinkClick = (url) => {
     // Handle suggestion clicks
@@ -26,7 +28,7 @@ export default function ChatPanel({
   };
 
   return (
-    <div className={`chat-panel ${previewOpen ? 'preview-open' : ''}`}>
+    <div className={`chat-panel ${previewOpen || artifactOpen ? 'preview-open' : ''}`}>
       <header className="chat-header">
         <button className="menu-toggle" onClick={onMenuToggle}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -43,7 +45,9 @@ export default function ChatPanel({
         messages={messages}
         loading={loading}
         onLinkClick={handleLinkClick}
+        onReask={onSend}
         mapsApiKey={mapsApiKey}
+        onOpenArtifact={onOpenArtifact}
       />
 
       <MessageInput

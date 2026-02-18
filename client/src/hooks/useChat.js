@@ -7,6 +7,7 @@ export function useChat() {
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [currentArtifact, setCurrentArtifact] = useState(null);
 
   // Tools state: { name, description, source, configured, enabled }
   const [availableTools, setAvailableTools] = useState([]);
@@ -29,21 +30,40 @@ export function useChat() {
   const loadTools = useCallback(async () => {
     try {
       const { tools } = await getTools();
-      setAvailableTools(tools.map(t => ({
+      
+      // Load saved tool preferences from localStorage
+      const savedEnabledTools = localStorage.getItem('enabledTools');
+      const savedPreferences = savedEnabledTools ? JSON.parse(savedEnabledTools) : null;
+      
+      const toolsWithPreferences = tools.map(t => ({
         ...t,
-        enabled: t.configured // default: enabled if configured
-      })));
+        // Use saved preference if available, otherwise default to configured status
+        enabled: savedPreferences ? savedPreferences[t.name] ?? t.configured : t.configured
+      }));
+      
+      setAvailableTools(toolsWithPreferences);
     } catch (err) {
       console.error('Error loading tools:', err);
     }
   }, []);
 
   const toggleTool = useCallback((toolName) => {
-    setAvailableTools(prev => prev.map(t =>
-      t.name === toolName && t.configured
-        ? { ...t, enabled: !t.enabled }
-        : t
-    ));
+    setAvailableTools(prev => {
+      const updated = prev.map(t =>
+        t.name === toolName && t.configured
+          ? { ...t, enabled: !t.enabled }
+          : t
+      );
+      
+      // Save tool preferences to localStorage
+      const enabledMap = {};
+      updated.forEach(t => {
+        enabledMap[t.name] = t.enabled;
+      });
+      localStorage.setItem('enabledTools', JSON.stringify(enabledMap));
+      
+      return updated;
+    });
   }, []);
 
   const loadConversation = useCallback(async (id) => {
@@ -57,7 +77,8 @@ export function useChat() {
           role: m.role,
           content: m.content,
           mapData: m.map_data,
-          searchResults: m.search_results
+          searchResults: m.search_results,
+          thinkingComplete: true  // Loaded messages are always complete
         })));
       }
     } catch (err) {
@@ -69,35 +90,74 @@ export function useChat() {
   }, []);
 
   const send = useCallback(async (message) => {
+    // Use unique string IDs to avoid timestamp collision between user/assistant messages
+    const baseId = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const userMsgId = `u_${baseId}`;
+    const assistantMsgId = `a_${baseId}`;
+
     try {
       setLoading(true);
       setError(null);
 
       // Add user message immediately
-      const userMessage = { role: 'user', content: message, id: Date.now() };
+      const userMessage = { role: 'user', content: message, id: userMsgId };
       setMessages(prev => [...prev, userMessage]);
 
-      // Send to API with enabled tools
+      // Add a placeholder assistant message to collect streaming steps
+      setMessages(prev => [...prev, {
+        role: 'assistant', content: '', id: assistantMsgId,
+        thinkingSteps: [], thinkingComplete: false
+      }]);
+
+      // Stream: collect steps live, then get final response
       const enabledToolNames = availableTools.filter(t => t.enabled).map(t => t.name);
-      const response = await sendMessage(conversationId, message, enabledToolNames);
+
+      const onStep = (step) => {
+        // Artifact step: set artifactData on the message and auto-open the panel immediately
+        if (step.type === 'artifact') {
+          setMessages(prev => prev.map(m =>
+            m.id === assistantMsgId
+              ? { ...m, artifactData: step.artifactData }
+              : m
+          ));
+          setCurrentArtifact(step.artifactData);
+          return;
+        }
+        setMessages(prev => prev.map(m =>
+          m.id === assistantMsgId
+            ? { ...m, thinkingSteps: [...(m.thinkingSteps || []), step] }
+            : m
+        ));
+      };
+
+      const response = await sendMessage(conversationId, message, enabledToolNames, onStep);
 
       // Update conversation ID if new
       if (response.isNewConversation || !conversationId) {
         setConversationId(response.conversationId);
-        loadConversations(); // Refresh conversation list
+        loadConversations();
       }
 
-      // Add assistant response
-      const assistantMessage = {
-        role: 'assistant',
-        content: response.reply,
-        mapData: response.mapData,
-        searchResults: response.searchResults,
-        id: Date.now() + 1
-      };
-      setMessages(prev => [...prev, assistantMessage]);
+      // Finalize the assistant message
+      setMessages(prev => prev.map(m =>
+        m.id === assistantMsgId
+          ? {
+              ...m,
+              content: response.reply,
+              mapData: response.mapData,
+              searchResults: response.searchResults,
+              // Keep artifact already set via step event; fall back to done-event artifact
+              artifactData: m.artifactData || response.artifactData,
+              thinkingComplete: true
+            }
+          : m
+      ));
 
-      // Refresh conversations to get updated title
+      // Auto-open artifact panel when an artifact is present
+      if (response.artifactData && !currentArtifact) {
+        setCurrentArtifact(response.artifactData);
+      }
+
       if (response.isNewConversation) {
         setTimeout(loadConversations, 500);
       }
@@ -105,12 +165,11 @@ export function useChat() {
     } catch (err) {
       console.error('Error sending message:', err);
       setError(err.message);
-      // Remove the user message on error
-      setMessages(prev => prev.slice(0, -1));
+      setMessages(prev => prev.filter(m => m.id !== assistantMsgId && m.id !== userMsgId));
     } finally {
       setLoading(false);
     }
-  }, [conversationId, loadConversations, availableTools]);
+  }, [conversationId, loadConversations, availableTools, currentArtifact]);
 
   const newConversation = useCallback(() => {
     setConversationId(null);
@@ -147,6 +206,9 @@ export function useChat() {
     deleteConversation,
     loadConversations,
     availableTools,
-    toggleTool
+    toggleTool,
+    loadTools,
+    currentArtifact,
+    setCurrentArtifact
   };
 }

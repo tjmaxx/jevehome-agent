@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 
 const TOOL_ICONS = {
   show_map: '🗺️',
@@ -8,7 +8,9 @@ const TOOL_ICONS = {
   show_street_view: '🏙️',
   get_user_location: '📡',
   send_email: '✉️',
-  search_documents: '📚'
+  search_documents: '📚',
+  web_search: '🔍',
+  generate_artifact: '🎨'
 };
 
 function getToolIcon(name) {
@@ -29,6 +31,19 @@ function getDisplayName(name) {
 
 export default function ToolMenu({ tools, onToggle }) {
   const [open, setOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    function handleOutsideClick(e) {
+      if (!open) return;
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, [open]);
 
   if (!tools || tools.length === 0) return null;
 
@@ -37,7 +52,7 @@ export default function ToolMenu({ tools, onToggle }) {
   const mcpTools = tools.filter(t => t.source === 'mcp');
 
   return (
-    <div className="tool-menu">
+    <div className="tool-menu" ref={menuRef}>
       <button
         className={`tool-menu-toggle ${open ? 'active' : ''}`}
         onClick={() => setOpen(!open)}

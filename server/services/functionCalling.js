@@ -97,6 +97,18 @@ export const tools = [
       },
       required: ["query"]
     }
+  },
+  {
+    name: "generate_artifact",
+    description: "Generate a self-contained HTML artifact to display charts, tables, dashboards, or other visual content. Use Chart.js for charts and graphs. Always call this when you have data to visualize (trends, comparisons, distributions) or when returning structured data from MCP tools that includes chartData or tabular data.",
+    parameters: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Short descriptive title for the artifact (e.g. 'Monthly Sales Revenue Trend')" },
+        html: { type: "string", description: "Complete self-contained HTML document with embedded CSS and JS. For charts include Chart.js from CDN: https://cdn.jsdelivr.net/npm/chart.js. Use dark background (#1a1a2e) to match app theme." }
+      },
+      required: ["title", "html"]
+    }
   }
 ];
 
@@ -283,6 +295,14 @@ export async function executeFunctionCall(name, args, userLocation = null) {
         return {
           success: true,
           ...result
+        };
+      }
+
+      case 'generate_artifact': {
+        return {
+          success: true,
+          message: `Generated artifact: ${args.title}`,
+          artifactData: { title: args.title, html: args.html }
         };
       }
 

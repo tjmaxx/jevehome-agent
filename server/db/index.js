@@ -28,6 +28,17 @@ try {
   // Column already exists, ignore
 }
 
+// Migration: add OAuth endpoint columns to mcp_servers
+try { db.exec('ALTER TABLE mcp_servers ADD COLUMN authorization_url TEXT'); } catch {}
+try { db.exec('ALTER TABLE mcp_servers ADD COLUMN token_url TEXT'); } catch {}
+
+// Migration: settings table
+db.exec(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`);
+// Insert defaults if not present
+const settingsDefaults = { max_steps: '10', max_retries: '2' };
+const insertSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
+for (const [k, v] of Object.entries(settingsDefaults)) insertSetting.run(k, v);
+
 // Conversation operations
 export function createConversation(id, title = 'New Chat') {
   const stmt = db.prepare('INSERT INTO conversations (id, title) VALUES (?, ?)');
@@ -143,6 +154,61 @@ export function getAllChunksWithEmbeddings() {
     JOIN documents d ON dc.document_id = d.id
     WHERE d.status = 'ready'
   `).all();
+}
+
+// MCP server operations
+export function getMcpServers() {
+  return db.prepare('SELECT * FROM mcp_servers ORDER BY created_at DESC').all();
+}
+
+export function getMcpServer(id) {
+  return db.prepare('SELECT * FROM mcp_servers WHERE id = ?').get(id);
+}
+
+export function createMcpServer(id, name, url, clientId, clientSecret, authorizationUrl, tokenUrl) {
+  db.prepare(
+    'INSERT INTO mcp_servers (id, name, url, client_id, client_secret, authorization_url, token_url) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).run(id, name, url, clientId || null, clientSecret || null, authorizationUrl || null, tokenUrl || null);
+  return getMcpServer(id);
+}
+
+export function updateMcpServer(id, name, url, clientId, clientSecret, authorizationUrl, tokenUrl) {
+  db.prepare(
+    'UPDATE mcp_servers SET name = ?, url = ?, client_id = ?, client_secret = ?, authorization_url = ?, token_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+  ).run(name, url, clientId || null, clientSecret || null, authorizationUrl || null, tokenUrl || null, id);
+}
+
+export function deleteMcpServer(id) {
+  db.prepare('DELETE FROM mcp_servers WHERE id = ?').run(id);
+}
+
+export function updateMcpServerToken(id, { accessToken, refreshToken, expiresAt }) {
+  db.prepare(
+    'UPDATE mcp_servers SET access_token = ?, refresh_token = ?, token_expires_at = ?, status = \'connected\', updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+  ).run(accessToken || null, refreshToken || null, expiresAt || null, id);
+}
+
+export function updateMcpServerStatus(id, status, errorMessage = null) {
+  db.prepare(
+    'UPDATE mcp_servers SET status = ?, error_message = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+  ).run(status, errorMessage, id);
+}
+
+// Settings operations
+export function getSetting(key, defaultValue = null) {
+  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
+  return row ? row.value : defaultValue;
+}
+
+export function setSetting(key, value) {
+  db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(key, String(value));
+}
+
+export function getAllSettings() {
+  return db.prepare('SELECT key, value FROM settings').all().reduce((acc, r) => {
+    acc[r.key] = r.value;
+    return acc;
+  }, {});
 }
 
 export default db;

@@ -43,9 +43,11 @@ const upload = multer({
 
 const router = express.Router();
 
-// List all documents
+// List all documents (fast endpoint - returns current status immediately)
 router.get('/documents', (req, res) => {
   try {
+    // Set quick response headers to return status immediately
+    res.set('Cache-Control', 'no-cache');
     const documents = getDocuments();
     res.json({ documents });
   } catch (error) {
@@ -80,7 +82,7 @@ router.post('/documents', upload.single('file'), async (req, res) => {
       req.file.size
     );
 
-    // Process asynchronously
+    // Process document asynchronously for embeddings
     processDocument(docId, req.file.path, req.file.mimetype)
       .catch(err => console.error(`[RAG] Async processing failed for ${docId}:`, err));
 

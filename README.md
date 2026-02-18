@@ -1,4 +1,4 @@
-# Gemini Maps Agent
+# Jevehome Agent
 
 An AI-powered web application with a chat interface powered by Google Gemini LLM and Google Maps integration.
 

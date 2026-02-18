@@ -7,7 +7,8 @@ export default function Sidebar({
   onNew,
   onDelete,
   collapsed,
-  onOpenKnowledgeBase
+  onOpenKnowledgeBase,
+  onOpenAdmin
 }) {
   return (
     <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
@@ -32,6 +33,13 @@ export default function Sidebar({
             <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
           </svg>
           Knowledge Base
+        </button>
+        <button className="kb-nav-btn" onClick={onOpenAdmin}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/>
+          </svg>
+          Admin
         </button>
       </div>
 

@@ -13,7 +13,8 @@ const CONFIG_CHECKS = {
   get_directions: () => !!process.env.GOOGLE_MAPS_API_KEY,
   show_street_view: () => !!process.env.GOOGLE_MAPS_API_KEY,
   get_user_location: () => true,
-  search_documents: () => !!process.env.GEMINI_API_KEY
+  search_documents: () => !!process.env.GEMINI_API_KEY,
+  web_search: () => !!process.env.GEMINI_API_KEY
 };
 
 router.get('/', (req, res) => {
@@ -24,6 +25,14 @@ router.get('/', (req, res) => {
     source: 'builtin',
     configured: CONFIG_CHECKS[t.name] ? CONFIG_CHECKS[t.name]() : true
   }));
+
+  // Web search is a special built-in (uses Gemini grounding, not a function declaration)
+  builtin.push({
+    name: 'web_search',
+    description: 'Search the web for current information, news, and facts using Google Search',
+    source: 'builtin',
+    configured: CONFIG_CHECKS.web_search()
+  });
 
   // MCP tools
   const mcp = getMcpTools().map(t => ({

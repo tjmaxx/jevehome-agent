@@ -6,6 +6,7 @@ import conversationsRoutes from './routes/conversations.js';
 import mapsRoutes from './routes/maps.js';
 import toolsRoutes from './routes/tools.js';
 import ragRoutes from './routes/rag.js';
+import adminRoutes from './routes/admin.js';
 import { initializeMcpClients, shutdownMcpClients } from './services/mcpClient.js';
 
 const app = express();
@@ -24,6 +25,7 @@ app.use('/api/conversations', conversationsRoutes);
 app.use('/api/maps', mapsRoutes);
 app.use('/api/tools', toolsRoutes);
 app.use('/api/rag', ragRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
